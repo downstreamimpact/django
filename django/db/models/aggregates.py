@@ -48,7 +48,9 @@ class Aggregate(Func):
     ):
         # Aggregates are not allowed in UPDATE queries, so ignore for_save
         c = super().resolve_expression(query, allow_joins, reuse, summarize)
-        c.filter = c.filter and c.filter.resolve_expression(query, allow_joins, reuse, summarize)
+        c.filter = c.filter and c.filter.resolve_expression(
+            query, allow_joins, reuse, summarize, reuse_with_filtered_relation=reuse_with_filtered_relation
+        )
         if not summarize:
             # Call Aggregate.get_source_expressions() to avoid
             # returning self.filter and including that in this loop.

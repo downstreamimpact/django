@@ -338,6 +338,11 @@ class FilteredRelation:
         # Add other usable aliases in the query to the reuse set.
         # Check for if it can be used is in Query.join
         reusable_aliases = self.path
+        # TODO - determine which from the alias_map have actually been applied as joins,
+        # TODO limit to those and make sure enough are added in the setup_joins
         reusable_aliases += list(query.alias_map.keys())
+        # import pdb
+        # pdb.set_trace()
+        # print("reusable_aliases", reusable_aliases)
         where = query.build_filtered_relation_q(self.condition, reuse=set(reusable_aliases))
         return compiler.compile(where)

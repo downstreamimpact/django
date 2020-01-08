@@ -87,7 +87,9 @@ class Join:
             join_conditions.append('(%s)' % extra_sql)
             params.extend(extra_params)
         if self.filtered_relation:
+            # print("compiling filtered relation", self.filtered_relation.relation_name)
             extra_sql, extra_params = compiler.compile(self.filtered_relation)
+            # print("compiled filtered relation", extra_sql, extra_params)
             if extra_sql:
                 join_conditions.append('(%s)' % extra_sql)
                 params.extend(extra_params)
@@ -100,6 +102,9 @@ class Join:
             )
         # TODO - on clause aliases specified here. too deep to change alias though
         on_clause_sql = ' AND '.join(join_conditions)
+        # if self.table_name in ('filtered_relation_editor',) or self.table_alias in ('T4',):
+        # import pdb;
+        # pdb.set_trace()
         alias_str = '' if self.table_alias == self.table_name else (' %s' % self.table_alias)
         sql = '%s %s%s ON (%s)' % (self.join_type, qn(self.table_name), alias_str, on_clause_sql)
         return sql, params

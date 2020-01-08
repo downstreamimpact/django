@@ -520,7 +520,9 @@ class F(Combinable):
 
     def resolve_expression(self, query=None, allow_joins=True, reuse=None,
                            summarize=False, for_save=False, simple_col=False, reuse_with_filtered_relation=False):
-        return query.resolve_ref(self.name, allow_joins, reuse, summarize, simple_col)
+        return query.resolve_ref(
+            self.name, allow_joins, reuse, summarize, simple_col, reuse_with_filtered_relation
+        )
 
     def asc(self, **kwargs):
         return OrderBy(self, **kwargs)

@@ -254,11 +254,83 @@ class FilteredRelationTests(TestCase):
         qs = Author.objects.filter(id__in=inner_qs)
         self.assertSequenceEqual(qs, [self.author1])
 
-    def test_with_foreign_key_on_condition(self):
+    def test_with_nested_foreign_key(self):
         qs = Author.objects.annotate(
-            book_edited_by_b=FilteredRelation('book', condition=Q(book__editor__name__icontains='b')),
-        ).filter(book_edited_by_b__isnull=False).distinct()
-        self.assertSequenceEqual(qs, [self.author2])
+            book_editor_worked_with=FilteredRelation('book__editor', condition=Q(book__title__icontains='book')),
+        ).filter(
+            book_editor_worked_with__isnull=False
+        ).select_related(
+            'book_editor_worked_with'
+        ).order_by(
+            'pk', 'book_editor_worked_with__pk'
+        ).distinct()
+
+        with self.assertNumQueries(1):
+            self.assertQuerysetEqual(qs, [
+                (self.author1, self.editor_a),
+                (self.author2, self.editor_b),
+            ], lambda x: (x, x.book_editor_worked_with))
+
+    def test_with_nested_field(self):
+        qs = Author.objects.annotate(
+            book_editor_worked_with=FilteredRelation('book__editor', condition=Q(book__title__icontains='book')),
+        ).filter(
+            book_editor_worked_with__isnull=False
+        ).values(
+            'name', 'book_editor_worked_with__name'
+        ).order_by(
+            'name', 'book_editor_worked_with__name'
+        ).distinct()
+
+        self.assertSequenceEqual(qs, [
+            {'name': self.author1.name, 'book_editor_worked_with__name': self.editor_a.name},
+            {'name': self.author2.name, 'book_editor_worked_with__name': self.editor_b.name},
+        ])
+
+    def test_with_deep_nested_foreign_key(self):
+        qs = Book.objects.annotate(
+            author_favorite_book_editor=FilteredRelation(
+                'author__favorite_books__editor',
+                condition=Q(author__favorite_books__title__icontains='Jane A')
+            )
+        ).filter(
+            author_favorite_book_editor__isnull=False
+        ).select_related(
+            'author_favorite_book_editor'
+        ).order_by(
+            'pk', 'author_favorite_book_editor__pk'
+        )
+
+        with self.assertNumQueries(1):
+            self.assertQuerysetEqual(qs, [
+                (self.book1, self.editor_b),
+                (self.book4, self.editor_b),
+            ], lambda x: (x, x.author_favorite_book_editor))
+
+    def test_with_foreign_key_on_condition_deeper_than_relationship_error(self):
+        msg = (
+            "FilteredRelation's condition doesn't support nested "
+            "on clauses deeper than the relation (got 'book__editor__name__icontains' for 'book')."
+        )
+        with self.assertRaisesMessage(ValueError, msg):
+            qs = Author.objects.annotate(
+                book_edited_by_b=FilteredRelation('book', condition=Q(book__editor__name__icontains='b')),
+            ).filter(book_edited_by_b__isnull=False).distinct()
+            list(qs)
+
+    def test_with_foreign_key_relation_name_lookup(self):
+        msg = (
+            "FilteredRelation's relation_name doesn't support lookups "
+            "(got 'book__title__icontains')."
+        )
+        with self.assertRaisesMessage(ValueError, msg):
+            qs = Author.objects.annotate(
+                book_edited_by_b=FilteredRelation(
+                    'book__title__icontains',
+                    condition=Q(book__editor__name__icontains='b')
+                ),
+            ).filter(book_edited_by_b__isnull=False).distinct()
+            list(qs)
 
     def test_with_nested_filtered_relationship(self):
         qs = Book.objects.annotate(

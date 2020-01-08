@@ -1220,6 +1220,26 @@ class Query:
                 parts, opts, alias, can_reuse=can_reuse, allow_many=allow_many,
                 reuse_with_filtered_relation=reuse_with_filtered_relation,
             )
+            # JoinInfo(
+            #   final_field=<ManyToOneRel: filtered_relation.book>,
+            # targets=(<django.db.models.fields.AutoField: id>,),
+            # opts=<Options for Book>,
+            # joins=['filtered_relation_author', 'book_edited_by_b'],
+            # path=[
+            #   PathInfo(from_opts=<Options for Author>, to_opts=<Options for Book>,
+            #   target_fields=(<django.db.models.fields.AutoField: id>,),
+            #   join_field=<ManyToOneRel: filtered_relation.book>,
+            #   m2m=True,
+            #   direct=False,
+            #   filtered_relation=<django.db.models.query_utils.FilteredRelation object at 0x108477908>)
+            # ],
+            # transform_function=<function Query.setup_joins.<locals>.final_transformer at 0x10845aea0>
+            # )
+            # for p in join_info.path:
+            #     if p.filtered_relation:
+            #         # TODO add joins for filtered_relation.condition
+            #         import pdb
+            #         pdb.set_trace()
 
             # Prevent iterator from being consumed by check_related_objects()
             if isinstance(value, Iterator):
@@ -1349,7 +1369,39 @@ class Query:
         return target_clause
 
     def add_filtered_relation(self, filtered_relation, alias):
+        # TODO add joins needed for condition, but don't apply condition to where clause
         filtered_relation.alias = alias
+        nested = False
+        lookups = dict(get_children_from_q(filtered_relation.condition))
+        relation_lookup_parts, relation_field_parts, _ = self.solve_lookup_type(filtered_relation.relation_name)
+        if relation_lookup_parts:
+            raise ValueError(
+                "FilteredRelation's relation_name doesn't support lookups "
+                "(got %r)." % filtered_relation.relation_name
+            )
+        for lookup in chain(lookups):
+            lookup_parts, field_parts, _ = self.solve_lookup_type(lookup)
+            shift = 2 if not lookup_parts else 1
+            # if the lookup field relationship is
+            lookup_path = field_parts[:-shift]
+            for relation_field_part in relation_field_parts:
+                if lookup_path:
+                    if relation_field_part != lookup_path[0]:
+                        # lookup isn't in the path, need to add path to lookup
+                        pass
+                    lookup_path = lookup_path[1:]
+            if lookup_path:
+                raise ValueError(
+                    "FilteredRelation's condition doesn't support nested "
+                    "on clauses deeper than the relation (got %r for %r)." % (lookup, filtered_relation.relation_name)
+                )
+
+        # if nested:
+        #     self.build_filtered_relation_q(
+        #         filtered_relation.condition,
+        #         set(list(self.alias_map.keys()))
+        #     )
+        #     clause, inners = self._add_q(filtered_relation.condition, self.used_aliases)
         self._filtered_relations[filtered_relation.alias] = filtered_relation
 
     def names_to_path(self, names, opts, allow_many=True, fail_on_missing=False):
@@ -1387,6 +1439,9 @@ class Query:
                         filtered_relation_path, field, _, _ = self.names_to_path(
                             parts, opts, allow_many, fail_on_missing
                         )
+                        # TODO - add in paths for filtered_relation.condition?
+                        # import pdb
+                        # pdb.set_trace()
                         # don't want the last one, because that one gets added on below and would be duplicate
                         path.extend(filtered_relation_path[:-1])
                     else:
@@ -1432,6 +1487,9 @@ class Query:
                     opts = path_to_parent[-1].to_opts
             if hasattr(field, 'get_path_info'):
                 pathinfos = field.get_path_info(filtered_relation)
+                # if filtered_relation:
+                #     import pdb
+                #     pdb.set_trace()
                 if not allow_many:
                     for inner_pos, p in enumerate(pathinfos):
                         if p.m2m:
@@ -1555,7 +1613,19 @@ class Query:
             )
             joins.append(alias)
             if filtered_relation:
+                # filtered_relation_aliases = list(set(joins[:] + list(self.alias_map.keys())))
+                # filtered_relation.path = filtered_relation_aliases
                 filtered_relation.path = joins[:]
+                # TODO - set more filtered_relation.PATH here so we don't need to in query_utils
+                # self.build_filter(filtered_relation.condition)
+                # filtered_relation.condition.resolve_expression(self)
+                # expr = filtered_relation.condition.resolve_expression(self)
+                # q = self.build_filter(expr)
+                # self.build_filtered_relation_q(filtered_relation.condition)
+                # self.add_q(filtered_relation.condition)
+                # self.setup_joins()
+                # import pdb
+                # pdb.set_trace()
         return JoinInfo(final_field, targets, opts, joins, path, final_transformer)
 
     def trim_joins(self, targets, joins, path):
